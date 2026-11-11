@@ -4,6 +4,7 @@ import React from 'react';
 import { UserVocabItem } from '../lib/types';
 import AudioPlayerButton from './AudioPlayerButton';
 import SentenceAudioButton from './SentenceAudioButton';
+import TranslateSentenceButton from './TranslateSentenceButton';
 import { BookOpen, Calendar, CheckCircle2, Clock, PenTool, Trash2 } from 'lucide-react';
 import { evaluateQuizMastery, MIN_ATTEMPTS_FOR_MASTERY } from '../lib/srs';
 
@@ -132,9 +133,12 @@ function VocabCard({ item, onDelete, onPractice }: Props) {
 
         {/* Example in Context */}
         {item.example && (
-          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs italic text-slate-700 dark:text-slate-300 flex items-start justify-between gap-2">
-            <span className="font-serif">"{item.example}"</span>
-            <SentenceAudioButton sentence={item.example} size={14} className="shrink-0 scale-90" />
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs italic text-slate-700 dark:text-slate-300 space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <span className="font-serif">"{item.example}"</span>
+              <SentenceAudioButton sentence={item.example} size={14} className="shrink-0 scale-90" />
+            </div>
+            <TranslateSentenceButton sentence={item.example} meaningHint={item.vietnameseMeaning} />
           </div>
         )}
 

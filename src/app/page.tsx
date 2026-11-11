@@ -36,6 +36,7 @@ import { fetchRandomWordExcluding } from '../lib/dictionaryApi';
 import { TOPIC_CATEGORIES, getRandomTopicWords } from '../data/topicsVocabulary';
 import AudioPlayerButton from '../components/AudioPlayerButton';
 import SentenceAudioButton from '../components/SentenceAudioButton';
+import TranslateSentenceButton from '../components/TranslateSentenceButton';
 import VocabCard from '../components/VocabCard';
 
 function LandingIntroPage() {
@@ -657,6 +658,10 @@ function AuthenticatedDashboard() {
                 <p className="text-sm italic text-slate-700 dark:text-slate-300 font-serif">
                   "{randomWord.definitions[0].example}"
                 </p>
+                <TranslateSentenceButton
+                  sentence={randomWord.definitions[0].example}
+                  meaningHint={randomWord.definitions[0]?.vietnameseMeaning}
+                />
               </div>
             )}
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import AudioPlayerButton from '../../components/AudioPlayerButton';
 import SentenceAudioButton from '../../components/SentenceAudioButton';
+import TranslateSentenceButton from '../../components/TranslateSentenceButton';
 import { calculateNextSRS, evaluateQuizMastery } from '../../lib/srs';
 import { shuffleArray } from '../../data/curatedDictionary';
 import { speakText, stopSpeaking } from '../../lib/speech';
@@ -572,6 +573,10 @@ export default function FlashcardPage() {
                         &ldquo;{currentCard.example}&rdquo;
                       </p>
                       <SentenceAudioButton sentence={currentCard.example} size={14} />
+                      <TranslateSentenceButton
+                        sentence={currentCard.example}
+                        meaningHint={currentCard.vietnameseMeaning}
+                      />
                     </div>
                   )}
 

@@ -82,12 +82,14 @@ export async function translateSentenceToVietnamese(sentence: string, targetWord
     }
   }
 
-  // 2. Fetch from Google Translate public client API
+  // 2. Fetch from Google Translate public client API with bounded timeout
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(
       sentence
     )}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && Array.isArray(data[0])) {
@@ -101,6 +103,8 @@ export async function translateSentenceToVietnamese(sentence: string, targetWord
     }
   } catch (err) {
     console.warn('Could not auto-translate sentence, using contextual fallback', err);
+  } finally {
+    clearTimeout(timer);
   }
 
   // 3. Meaningful fallback

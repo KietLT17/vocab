@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { UserVocabItem } from '../../lib/types';
 import { getDueReviewWords, getStoredUserVocab } from '../../lib/storage';
-import { speakText, stopSpeaking } from '../../lib/speech';
+import { playAudioUrlWithFallback, speakText, stopSpeaking, unlockSpeechAudio } from '../../lib/speech';
+import { translateSentenceToVietnamese } from '../../data/sentenceTranslations';
 
 export default function HandsFreeAudioPage() {
   const [playlist, setPlaylist] = useState<UserVocabItem[]>([]);
@@ -26,12 +27,14 @@ export default function HandsFreeAudioPage() {
   const [isRepeatWord, setIsRepeatWord] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(0.95);
   const [currentStepText, setCurrentStepText] = useState<string>('Sẵn sàng');
+  const [exampleTranslation, setExampleTranslation] = useState<string>('');
 
   const isPlayingRef = useRef(false);
   const isRepeatRef = useRef(false);
   const currentIndexRef = useRef(0);
   const playlistRef = useRef<UserVocabItem[]>([]);
   const speechRateRef = useRef(0.95);
+  const runIdRef = useRef(0);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -73,71 +76,69 @@ export default function HandsFreeAudioPage() {
 
   const currentItem = playlist[currentIndex];
 
+  useEffect(() => {
+    let active = true;
+    if (!currentItem?.example) {
+      setExampleTranslation('');
+      return;
+    }
+    setExampleTranslation('');
+    translateSentenceToVietnamese(currentItem.example, currentItem.vietnameseMeaning).then((vi) => {
+      if (active) setExampleTranslation(vi);
+    });
+    return () => {
+      active = false;
+    };
+  }, [currentItem?.id, currentItem?.example, currentItem?.vietnameseMeaning]);
+
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   // Play audio url (native mp3) or fallback to speech
   const playNativeOrSpeechWord = (wordItem: UserVocabItem): Promise<void> => {
     return new Promise((resolve) => {
-      if (wordItem.audioUrl) {
-        const audio = new Audio(wordItem.audioUrl);
-        audio.playbackRate = speechRateRef.current;
-        audio.onended = () => resolve();
-        audio.onerror = () => {
-          speakText(wordItem.word, {
-            lang: 'en-US',
-            rate: speechRateRef.current,
-            onEnd: () => resolve(),
-            onError: () => resolve(),
-          });
-        };
-        audio.play().catch(() => {
-          speakText(wordItem.word, {
-            lang: 'en-US',
-            rate: speechRateRef.current,
-            onEnd: () => resolve(),
-            onError: () => resolve(),
-          });
-        });
-      } else {
-        speakText(wordItem.word, {
-          lang: 'en-US',
-          rate: speechRateRef.current,
-          onEnd: () => resolve(),
-          onError: () => resolve(),
-        });
-      }
+      playAudioUrlWithFallback(wordItem.audioUrl, wordItem.word, {
+        lang: 'en-US',
+        rate: speechRateRef.current,
+        onEnd: () => resolve(),
+        onError: () => resolve(),
+      });
     });
   };
 
   // Automated sequence loop for 1 word
   const playWordSequence = async (idx: number) => {
+    const myRunId = ++runIdRef.current;
     if (!isPlayingRef.current) return;
     const item = playlistRef.current[idx];
     if (!item) return;
 
+    const aborted = () => !isPlayingRef.current || runIdRef.current !== myRunId;
+
     // Step 1: Speak English Word
     setCurrentStepText(`1. Đang đọc từ: "${item.word}"`);
     await playNativeOrSpeechWord(item);
-    if (!isPlayingRef.current) return;
+    if (aborted()) return;
     await sleep(900);
+    if (aborted()) return;
 
-    // Step 2: Speak Vietnamese meaning if present
-    if (item.vietnameseMeaning && isPlayingRef.current) {
+    // Step 2: Speak Vietnamese meaning with natural Vietnamese voice
+    if (item.vietnameseMeaning) {
       setCurrentStepText(`2. Nghĩa tiếng Việt: "${item.vietnameseMeaning}"`);
       await new Promise<void>((resolve) => {
         speakText(item.vietnameseMeaning!, {
           lang: 'vi-VN',
-          rate: 1.0,
+          rate: Math.max(0.9, Math.min(1.1, speechRateRef.current)),
           onEnd: () => resolve(),
           onError: () => resolve(),
         });
       });
-      if (!isPlayingRef.current) return;
+      if (aborted()) return;
       await sleep(900);
+      if (aborted()) return;
     }
 
     // Step 3: Speak Example Sentence
-    if (item.example && isPlayingRef.current) {
+    if (item.example) {
       setCurrentStepText(`3. Đọc câu ví dụ ngữ cảnh...`);
       await new Promise<void>((resolve) => {
         speakText(item.example, {
@@ -147,18 +148,14 @@ export default function HandsFreeAudioPage() {
           onError: () => resolve(),
         });
       });
-      if (!isPlayingRef.current) return;
+      if (aborted()) return;
       await sleep(1500);
+      if (aborted()) return;
     }
 
-    // Next step
-    if (!isPlayingRef.current) return;
-
     if (isRepeatRef.current) {
-      // Repeat same word
       playWordSequence(idx);
     } else {
-      // Advance to next word
       const nextIndex = (idx + 1) % playlistRef.current.length;
       setCurrentIndex(nextIndex);
       currentIndexRef.current = nextIndex;
@@ -168,11 +165,13 @@ export default function HandsFreeAudioPage() {
 
   const handleTogglePlay = () => {
     if (isPlaying) {
+      runIdRef.current += 1;
       setIsPlaying(false);
       isPlayingRef.current = false;
       stopSpeaking();
       setCurrentStepText('Tạm dừng');
     } else {
+      unlockSpeechAudio();
       setIsPlaying(true);
       isPlayingRef.current = true;
       playWordSequence(currentIndex);
@@ -180,7 +179,9 @@ export default function HandsFreeAudioPage() {
   };
 
   const handleSkipNext = () => {
+    runIdRef.current += 1;
     stopSpeaking();
+    unlockSpeechAudio();
     const nextIndex = (currentIndex + 1) % playlist.length;
     setCurrentIndex(nextIndex);
     currentIndexRef.current = nextIndex;
@@ -190,7 +191,9 @@ export default function HandsFreeAudioPage() {
   };
 
   const handleSkipPrev = () => {
+    runIdRef.current += 1;
     stopSpeaking();
+    unlockSpeechAudio();
     const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
     setCurrentIndex(prevIndex);
     currentIndexRef.current = prevIndex;
@@ -264,10 +267,15 @@ export default function HandsFreeAudioPage() {
           </p>
         </div>
 
-        {/* Example Sentence */}
+        {/* Example Sentence + Vietnamese translation */}
         {currentItem.example && (
-          <div className="p-4 rounded-2xl bg-black/20 border border-white/5 text-sm italic font-serif text-slate-200 max-w-md mx-auto">
-            "{currentItem.example}"
+          <div className="p-4 rounded-2xl bg-black/20 border border-white/5 max-w-md mx-auto space-y-1.5">
+            <p className="text-sm italic font-serif text-slate-200">
+              &ldquo;{currentItem.example}&rdquo;
+            </p>
+            <p className="text-xs text-indigo-200 font-medium">
+              {exampleTranslation ? exampleTranslation : 'Đang dịch câu ví dụ...'}
+            </p>
           </div>
         )}
 
@@ -342,7 +350,9 @@ export default function HandsFreeAudioPage() {
             <button
               key={w.id}
               onClick={() => {
+                runIdRef.current += 1;
                 stopSpeaking();
+                unlockSpeechAudio();
                 setCurrentIndex(idx);
                 currentIndexRef.current = idx;
                 if (isPlayingRef.current) {

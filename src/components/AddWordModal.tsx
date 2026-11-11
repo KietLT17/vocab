@@ -18,6 +18,7 @@ import { lookupDictionaryWord, fetchRandomWordExcluding } from '../lib/dictionar
 import { addWordToBank, addBatchWordsToBank, getStoredUserVocab } from '../lib/storage';
 import { TOPIC_CATEGORIES, getRandomTopicWords } from '../data/topicsVocabulary';
 import AudioPlayerButton from './AudioPlayerButton';
+import TranslateSentenceButton from './TranslateSentenceButton';
 
 interface Props {
   isOpen: boolean;
@@ -426,8 +427,12 @@ export default function AddWordModal({ isOpen, onClose, onAddedSuccess }: Props)
                   </div>
 
                   {previewWord.definitions[0]?.example && (
-                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs italic text-slate-600 dark:text-slate-400">
-                      "{previewWord.definitions[0].example}"
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs italic text-slate-600 dark:text-slate-400 space-y-1.5">
+                      <p>"{previewWord.definitions[0].example}"</p>
+                      <TranslateSentenceButton
+                        sentence={previewWord.definitions[0].example}
+                        meaningHint={previewWord.definitions[0]?.vietnameseMeaning}
+                      />
                     </div>
                   )}
 
