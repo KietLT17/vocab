@@ -45,6 +45,23 @@ const SAMPLE_DEFINITIONS: Array<{
       favoriteTopics: ['daily_life'],
       avatarColor: 'from-emerald-600 to-teal-600',
     },
+    ...(
+      [
+        { n: 1, avatarColor: 'from-sky-600 to-blue-600' },
+        { n: 2, avatarColor: 'from-violet-600 to-purple-600' },
+        { n: 3, avatarColor: 'from-amber-600 to-orange-600' },
+      ] as const
+    ).map(({ n, avatarColor }) => ({
+      id: `u_hocvien${n}`,
+      username: `hocvien${n}`,
+      password: '123456',
+      displayName: `Học viên ${n}`,
+      targetLevel: 'B2' as CEFRLevel,
+      dailyGoalReviews: 15,
+      preferredStudyMode: 'COMBO' as StudyModePreference,
+      favoriteTopics: ['daily_life'],
+      avatarColor,
+    })),
   ];
 
 async function hashPassword(password: string, salt: string): Promise<string> {

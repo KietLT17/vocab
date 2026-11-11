@@ -105,13 +105,20 @@ async function main() {
   ]);
   assert.equal(storage.getStoredUserVocab()[0].status, 'MASTERED', '3/4 (75%) must be MASTERED');
 
-  // 6. Logout hides data again
+  // 6. Extra empty accounts hocvien1..hocvien3 start isolated and empty
+  for (const n of [1, 2, 3]) {
+    const loginRes = await auth.loginAccount(`hocvien${n}`, '123456');
+    assert.equal(loginRes.ok, true, `hocvien${n} should log in`);
+    assert.equal(storage.getStoredUserVocab().length, 0, `hocvien${n} starts empty`);
+  }
+
+  // 7. Logout hides data again
   auth.logoutAccount();
   assert.equal(auth.getActiveUserId(), null);
   assert.equal(storage.getStoredUserVocab().length, 0, 'After logout no vocab is exposed');
 
   console.log('verify-core passed:', {
-    sampleAccounts: auth.listSampleAccountsOverview().map((a) => a.username),
+    verifiedStudents: ['hocvien', 'hocvien1', 'hocvien2', 'hocvien3'],
     demoWords: demoVocab.length,
     demoMasteredWords: demoTestGen.masteredWordsCount,
     demoGeneratedQuestions: demoTestGen.questions.length,
