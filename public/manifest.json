@@ -1,0 +1,18 @@
+{
+  "name": "VocabFlow - Học từ vựng tiếng Anh theo ngữ cảnh",
+  "short_name": "VocabFlow",
+  "description": "Ứng dụng học từ vựng tiếng Anh tiện lợi với nguồn từ điển chuẩn, phát âm, ngữ cảnh và lặp lại ngắt quãng SRS.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
