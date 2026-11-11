@@ -10,13 +10,23 @@ import {
   LayoutDashboard,
   GraduationCap,
   BookmarkCheck,
-  PlusCircle,
   Headphones,
   ClipboardCheck,
   FileText,
+  Layers,
   Lock,
   LogIn,
 } from 'lucide-react';
+
+const MOBILE_TABS = [
+  { href: '/', label: 'Tổng quan', icon: LayoutDashboard, activeColor: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50' },
+  { href: '/flashcard', label: 'Flashcard', icon: Layers, activeColor: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50' },
+  { href: '/practice', label: 'Luyện tập', icon: GraduationCap, activeColor: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50' },
+  { href: '/vocabulary', label: 'Kho từ', icon: BookmarkCheck, activeColor: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50' },
+  { href: '/test', label: 'Test 50', icon: ClipboardCheck, activeColor: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50' },
+  { href: '/writing', label: 'Viết đoạn', icon: FileText, activeColor: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50' },
+  { href: '/handsfree', label: 'Rảnh tay', icon: Headphones, activeColor: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50' },
+] as const;
 import { getActiveUserProfile } from '../lib/auth';
 import { UserProfile } from '../lib/types';
 
@@ -57,8 +67,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main
         className={
           mounted && activeUser
-            ? 'flex-1 max-w-6xl w-full mx-auto px-4 py-6 pb-24 md:pb-12'
-            : 'flex-1 max-w-6xl w-full mx-auto px-4 py-6 pb-12'
+            ? 'flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-28 lg:pb-12'
+            : 'flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-12'
         }
       >
         {!mounted ? (
@@ -99,89 +109,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </main>
 
-      {/* Mobile Bottom Tab Bar (hidden before login) */}
+      {/* Mobile Bottom Tab Bar (hidden before login, scrollable on narrow screens + safe-area) */}
       {mounted && activeUser && (
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-800 px-6 py-2 flex items-center justify-around">
-        <Link
-          href="/"
-          className={`flex flex-col items-center gap-1 text-xs font-medium py-1 ${
-            pathname === '/'
-              ? 'text-blue-600 dark:text-blue-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <LayoutDashboard size={20} />
-          <span>Tổng quan</span>
-        </Link>
-
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex flex-col items-center gap-1 text-xs font-semibold py-1 text-blue-600 dark:text-blue-400"
-        >
-          <PlusCircle size={22} className="stroke-[2.5]" />
-          <span>Thêm từ</span>
-        </button>
-
-        <Link
-          href="/practice"
-          className={`flex flex-col items-center gap-1 text-xs font-medium py-1 ${
-            pathname === '/practice'
-              ? 'text-blue-600 dark:text-blue-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <GraduationCap size={20} />
-          <span>Luyện tập</span>
-        </Link>
-
-        <Link
-          href="/test"
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium py-1 whitespace-nowrap ${
-            pathname === '/test'
-              ? 'text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <ClipboardCheck size={19} />
-          <span>Test 50</span>
-        </Link>
-
-        <Link
-          href="/writing"
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium py-1 whitespace-nowrap ${
-            pathname === '/writing'
-              ? 'text-purple-600 dark:text-purple-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <FileText size={19} />
-          <span>Viết đoạn</span>
-        </Link>
-
-        <Link
-          href="/vocabulary"
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium py-1 whitespace-nowrap ${
-            pathname === '/vocabulary'
-              ? 'text-blue-600 dark:text-blue-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <BookmarkCheck size={19} />
-          <span>Kho từ</span>
-        </Link>
-
-        <Link
-          href="/handsfree"
-          className={`hidden xs:flex sm:flex flex-col items-center gap-1 text-[11px] font-medium py-1 whitespace-nowrap ${
-            pathname === '/handsfree'
-              ? 'text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <Headphones size={19} />
-          <span>Rảnh tay</span>
-        </Link>
-      </div>
+      <nav
+        aria-label="Điều hướng di động"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-800 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-start sm:justify-around gap-1 overflow-x-auto no-scrollbar snap-x"
+      >
+        {MOBILE_TABS.map(({ href, label, icon: Icon, activeColor }) => {
+          const isActive = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`shrink-0 snap-start min-w-[66px] flex flex-col items-center justify-center gap-0.5 text-[11px] py-1.5 px-2 rounded-xl whitespace-nowrap transition-colors ${
+                isActive
+                  ? `${activeColor} font-bold`
+                  : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Icon size={19} />
+              <span>{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
       )}
 
       {mounted && activeUser && (

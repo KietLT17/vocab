@@ -317,56 +317,56 @@ function AuthenticatedDashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-200/60 dark:border-amber-800/40">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 dark:from-amber-500/15 dark:to-orange-500/15 border border-amber-200/70 dark:border-amber-700/40">
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <Flame size={20} className="fill-amber-500" />
-              <span className="text-xs font-bold uppercase tracking-wider">Chuỗi Streak</span>
+              <Flame size={18} className="fill-amber-500 shrink-0" />
+              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Chuỗi Streak</span>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
-              {stats.streak} <span className="text-sm font-semibold text-slate-500">ngày</span>
+            <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
+              {stats.streak} <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">ngày</span>
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/60 dark:border-blue-800/40">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 dark:from-blue-500/15 dark:to-indigo-500/15 border border-blue-200/70 dark:border-blue-700/40">
             <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-              <BookOpen size={20} />
-              <span className="text-xs font-bold uppercase tracking-wider">Kho từ vựng</span>
+              <BookOpen size={18} className="shrink-0" />
+              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Kho từ vựng</span>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
-              {userVocab.length} <span className="text-sm font-semibold text-slate-500">từ</span>
+            <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
+              {userVocab.length} <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">từ</span>
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/10 to-red-500/10 border border-rose-200/60 dark:border-rose-800/40">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-rose-500/10 to-red-500/10 dark:from-rose-500/15 dark:to-red-500/15 border border-rose-200/70 dark:border-rose-700/40">
             <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-              <Clock size={20} />
-              <span className="text-xs font-bold uppercase tracking-wider">Cần ôn hôm nay</span>
+              <Clock size={18} className="shrink-0" />
+              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Cần ôn hôm nay</span>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
-              {dueWords.length} <span className="text-sm font-semibold text-slate-500">từ</span>
+            <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
+              {dueWords.length} <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">từ</span>
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/60 dark:border-emerald-800/40">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 dark:from-emerald-500/15 dark:to-teal-500/15 border border-emerald-200/70 dark:border-emerald-700/40">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 size={20} />
-              <span className="text-xs font-bold uppercase tracking-wider">Đã làm chủ</span>
+              <CheckCircle2 size={18} className="shrink-0" />
+              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Đã làm chủ</span>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
-              {masteredCount} <span className="text-sm font-semibold text-slate-500">từ</span>
+            <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
+              {masteredCount} <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">từ</span>
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2. Banner: Ready to Review SRS */}
-      {dueWords.length > 0 && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xl shadow-blue-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* 2. Banner: Ready to Review SRS + Flashcard */}
+      {dueWords.length > 0 ? (
+        <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xl shadow-blue-500/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider">
               <Clock size={14} /> SRS Hàng đợi ôn tập
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold">
+            <h2 className="text-lg sm:text-2xl font-extrabold">
               Bạn có {dueWords.length} từ đến lịch ôn tập hôm nay
             </h2>
             <p className="text-xs sm:text-sm text-blue-100 max-w-xl">
@@ -374,15 +374,45 @@ function AuthenticatedDashboard() {
             </p>
           </div>
 
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+            <Link
+              href="/flashcard"
+              className="w-full sm:w-auto px-5 py-3 bg-white/15 hover:bg-white/25 border border-white/30 text-white active:scale-95 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition"
+            >
+              <Layers size={18} />
+              <span>Học Flashcard</span>
+            </Link>
+            <Link
+              href="/practice"
+              className="w-full sm:w-auto px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 active:scale-95 rounded-2xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition"
+            >
+              <Play size={18} className="fill-blue-600" />
+              <span>Bắt đầu ôn ngay</span>
+            </Link>
+          </div>
+        </div>
+      ) : userVocab.length > 0 ? (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Layers size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold">Lật thẻ Flashcard ghi nhớ nhanh</h3>
+              <p className="text-xs text-amber-50">
+                Ôn nhanh nghĩa, phát âm và ví dụ của {userVocab.length} từ trong kho chỉ bằng 1 chạm.
+              </p>
+            </div>
+          </div>
           <Link
-            href="/practice"
-            className="w-full sm:w-auto px-6 py-3.5 bg-white text-blue-600 hover:bg-blue-50 active:scale-95 rounded-2xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition"
+            href="/flashcard"
+            className="w-full sm:w-auto px-4 py-2.5 bg-white text-amber-700 hover:bg-amber-50 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shrink-0 transition"
           >
-            <Play size={18} className="fill-blue-600" />
-            <span>Bắt đầu ôn ngay</span>
+            <Layers size={15} />
+            <span>Mở Flashcard</span>
           </Link>
         </div>
-      )}
+      ) : null}
 
       {/* Quick Hands-free Audio Banner */}
       <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-900/40 text-white shadow-md flex items-center justify-between gap-4">

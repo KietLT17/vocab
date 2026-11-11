@@ -105,6 +105,12 @@ async function main() {
   ]);
   assert.equal(storage.getStoredUserVocab()[0].status, 'MASTERED', '3/4 (75%) must be MASTERED');
 
+  // Flashcard review updates SRS interval without mutating quiz accuracy counts
+  const beforeFc = storage.getStoredUserVocab()[0];
+  const afterFc = storage.recordWordReview('resilient', 'EASY');
+  assert.equal(afterFc.timesCorrect, beforeFc.timesCorrect, 'Flashcard must not inflate quiz correct count');
+  assert.ok(afterFc.repetitions >= 1 && afterFc.intervalDays >= 1, 'Flashcard updates SRS schedule');
+
   // 6. Extra empty accounts hocvien1..hocvien3 start isolated and empty
   for (const n of [1, 2, 3]) {
     const loginRes = await auth.loginAccount(`hocvien${n}`, '123456');
