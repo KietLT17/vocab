@@ -15,6 +15,7 @@ const CANCEL_SPEECH_COOLDOWN_MS = 75;
 
 let sharedAudio: HTMLAudioElement | null = null;
 let playbackToken = 0;
+let audioAttemptId = 0;
 let audioUnlocked = false;
 let webSpeechTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSpeechCancelAt = 0;
@@ -63,6 +64,7 @@ export function unlockSpeechAudio(): void {
 
 export function stopSpeaking(): void {
   playbackToken += 1;
+  audioAttemptId += 1;
 
   if (webSpeechTimer !== null) {
     clearTimeout(webSpeechTimer);
@@ -72,8 +74,8 @@ export function stopSpeaking(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
       lastSpeechCancelAt = Date.now();
-      window.speechSynthesis.cancel();
     }
+    window.speechSynthesis.cancel();
   }
 
   const audio = sharedAudio;
@@ -227,21 +229,25 @@ function playUrlQueue(
 
     const url = urls[index];
     index += 1;
+    const myAttempt = ++audioAttemptId;
     clearAudioHandlers(audio);
     const targetRate = Math.max(0.75, Math.min(1.35, options.rate ?? 1));
     audio.src = url;
     audio.playbackRate = targetRate;
 
-    audio.onended = () => {
-      if (token !== playbackToken) return;
-      playNext();
-    };
-
-    audio.onerror = () => {
-      if (token !== playbackToken) return;
+    const triggerFailure = () => {
+      if (token !== playbackToken || myAttempt !== audioAttemptId) return;
+      audioAttemptId += 1;
       clearAudioHandlers(audio);
       onAllFailed();
     };
+
+    audio.onended = () => {
+      if (token !== playbackToken || myAttempt !== audioAttemptId) return;
+      playNext();
+    };
+
+    audio.onerror = triggerFailure;
 
     try {
       const playPromise = audio.play();
@@ -249,21 +255,16 @@ function playUrlQueue(
         playPromise
           .then(() => {
             audioUnlocked = true;
-            if (token === playbackToken) {
+            if (token === playbackToken && myAttempt === audioAttemptId) {
               audio.playbackRate = targetRate;
             }
           })
-          .catch(() => {
-            if (token !== playbackToken) return;
-            clearAudioHandlers(audio);
-            onAllFailed();
-          });
+          .catch(triggerFailure);
       } else {
         audioUnlocked = true;
       }
     } catch {
-      clearAudioHandlers(audio);
-      onAllFailed();
+      triggerFailure();
     }
   };
 
