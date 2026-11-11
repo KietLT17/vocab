@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   Headphones,
@@ -8,20 +8,32 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  RotateCcw,
-  Volume2,
   ArrowLeft,
-  Sparkles,
   Repeat,
-  Gauge
+  Gauge,
+  Shuffle,
 } from 'lucide-react';
-import { UserVocabItem } from '../../lib/types';
+import { UserVocabItem, VocabStatus } from '../../lib/types';
 import { getDueReviewWords, getStoredUserVocab } from '../../lib/storage';
+import { shuffleArray } from '../../data/curatedDictionary';
 import { playAudioUrlWithFallback, speakText, stopSpeaking, unlockSpeechAudio } from '../../lib/speech';
 import { translateSentenceToVietnamese } from '../../data/sentenceTranslations';
 
+type HandsfreeFilter = 'DUE' | 'UNMASTERED' | VocabStatus | 'ALL';
+
+const WORD_LIMIT_PRESETS: Array<{ value: number; label: string }> = [
+  { value: 5, label: '5' },
+  { value: 10, label: '10' },
+  { value: 20, label: '20' },
+  { value: 0, label: 'Tất cả' },
+];
+
 export default function HandsFreeAudioPage() {
-  const [playlist, setPlaylist] = useState<UserVocabItem[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [baseWords, setBaseWords] = useState<UserVocabItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<HandsfreeFilter>('DUE');
+  const [wordLimit, setWordLimit] = useState<number>(0);
+  const [customLimitText, setCustomLimitText] = useState<string>('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRepeatWord, setIsRepeatWord] = useState(false);
@@ -35,6 +47,56 @@ export default function HandsFreeAudioPage() {
   const playlistRef = useRef<UserVocabItem[]>([]);
   const speechRateRef = useRef(0.95);
   const runIdRef = useRef(0);
+
+  const statusSummary = useMemo(() => {
+    const now = Date.now();
+    let due = 0;
+    let unmastered = 0;
+    let newCount = 0;
+    let learning = 0;
+    let reviewing = 0;
+    let mastered = 0;
+
+    for (const w of baseWords) {
+      if (new Date(w.nextReviewAt).getTime() <= now) due += 1;
+      if (w.status !== 'MASTERED') unmastered += 1;
+      if (w.status === 'NEW') newCount += 1;
+      else if (w.status === 'LEARNING') learning += 1;
+      else if (w.status === 'REVIEWING') reviewing += 1;
+      else if (w.status === 'MASTERED') mastered += 1;
+    }
+
+    return {
+      due,
+      unmastered,
+      NEW: newCount,
+      LEARNING: learning,
+      REVIEWING: reviewing,
+      MASTERED: mastered,
+      total: baseWords.length,
+    };
+  }, [baseWords]);
+
+  const filteredPool = useMemo(() => {
+    const now = Date.now();
+    if (statusFilter === 'ALL') return baseWords;
+    if (statusFilter === 'DUE') {
+      return baseWords.filter((w) => new Date(w.nextReviewAt).getTime() <= now);
+    }
+    if (statusFilter === 'UNMASTERED') {
+      return baseWords.filter((w) => w.status !== 'MASTERED');
+    }
+    return baseWords.filter((w) => w.status === statusFilter);
+  }, [baseWords, statusFilter]);
+
+  const playlist = useMemo(() => {
+    if (wordLimit > 0) {
+      return filteredPool.slice(0, Math.min(wordLimit, filteredPool.length));
+    }
+    return filteredPool;
+  }, [filteredPool, wordLimit]);
+
+  const safeIndex = playlist.length > 0 ? Math.min(currentIndex, playlist.length - 1) : 0;
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -56,25 +118,44 @@ export default function HandsFreeAudioPage() {
     speechRateRef.current = speechRate;
   }, [speechRate]);
 
+  const stopAndResetPlayback = () => {
+    runIdRef.current += 1;
+    stopSpeaking();
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setCurrentIndex(0);
+    currentIndexRef.current = 0;
+    setCurrentStepText('Sẵn sàng');
+  };
+
   useEffect(() => {
-    const refreshPlaylist = () => {
+    const loadWords = (resetFilter: boolean) => {
       const due = getDueReviewWords();
       const all = getStoredUserVocab();
-      setPlaylist(due.length > 0 ? due : all);
-      setCurrentIndex(0);
+      setBaseWords(all);
+      if (resetFilter) {
+        setStatusFilter(due.length > 0 ? 'DUE' : 'ALL');
+      }
+      stopAndResetPlayback();
+      setHasLoaded(true);
     };
 
-    refreshPlaylist();
-    window.addEventListener('vocabflow_account_changed', refreshPlaylist);
+    const handleAccountChanged = () => loadWords(true);
+    const handleStorageUpdated = () => loadWords(false);
+
+    loadWords(true);
+    window.addEventListener('vocabflow_account_changed', handleAccountChanged);
+    window.addEventListener('vocabflow_storage_updated', handleStorageUpdated);
 
     return () => {
-      window.removeEventListener('vocabflow_account_changed', refreshPlaylist);
+      window.removeEventListener('vocabflow_account_changed', handleAccountChanged);
+      window.removeEventListener('vocabflow_storage_updated', handleStorageUpdated);
       stopSpeaking();
       isPlayingRef.current = false;
     };
   }, []);
 
-  const currentItem = playlist[currentIndex];
+  const currentItem = playlist[safeIndex];
 
   useEffect(() => {
     let active = true;
@@ -164,6 +245,7 @@ export default function HandsFreeAudioPage() {
   };
 
   const handleTogglePlay = () => {
+    if (playlist.length === 0) return;
     if (isPlaying) {
       runIdRef.current += 1;
       setIsPlaying(false);
@@ -174,15 +256,16 @@ export default function HandsFreeAudioPage() {
       unlockSpeechAudio();
       setIsPlaying(true);
       isPlayingRef.current = true;
-      playWordSequence(currentIndex);
+      playWordSequence(safeIndex);
     }
   };
 
   const handleSkipNext = () => {
+    if (playlist.length === 0) return;
     runIdRef.current += 1;
     stopSpeaking();
     unlockSpeechAudio();
-    const nextIndex = (currentIndex + 1) % playlist.length;
+    const nextIndex = (safeIndex + 1) % playlist.length;
     setCurrentIndex(nextIndex);
     currentIndexRef.current = nextIndex;
     if (isPlayingRef.current) {
@@ -191,10 +274,11 @@ export default function HandsFreeAudioPage() {
   };
 
   const handleSkipPrev = () => {
+    if (playlist.length === 0) return;
     runIdRef.current += 1;
     stopSpeaking();
     unlockSpeechAudio();
-    const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+    const prevIndex = (safeIndex - 1 + playlist.length) % playlist.length;
     setCurrentIndex(prevIndex);
     currentIndexRef.current = prevIndex;
     if (isPlayingRef.current) {
@@ -202,7 +286,50 @@ export default function HandsFreeAudioPage() {
     }
   };
 
-  if (playlist.length === 0) {
+  const handleStatusChange = (nextStatus: HandsfreeFilter) => {
+    setStatusFilter(nextStatus);
+    stopAndResetPlayback();
+  };
+
+  const handlePresetLimitChange = (nextLimit: number) => {
+    setWordLimit(nextLimit);
+    setCustomLimitText('');
+    stopAndResetPlayback();
+  };
+
+  const handleCustomLimitChange = (raw: string) => {
+    const cleanDigits = raw.replace(/\D/g, '').replace(/^0+/, '');
+    if (!cleanDigits) {
+      setCustomLimitText('');
+      setWordLimit(0);
+      stopAndResetPlayback();
+      return;
+    }
+
+    const parsed = Math.min(9999, parseInt(cleanDigits, 10));
+    setCustomLimitText(String(parsed));
+    setWordLimit(parsed);
+    stopAndResetPlayback();
+  };
+
+  const handleShuffle = () => {
+    setBaseWords((prev) => shuffleArray(prev));
+    stopAndResetPlayback();
+  };
+
+  const statusOptions: Array<{ id: HandsfreeFilter; label: string; count: number }> = [
+    { id: 'DUE', label: 'Cần ôn', count: statusSummary.due },
+    { id: 'UNMASTERED', label: 'Chưa thuộc', count: statusSummary.unmastered },
+    { id: 'NEW', label: 'Từ mới', count: statusSummary.NEW },
+    { id: 'LEARNING', label: 'Đang học', count: statusSummary.LEARNING },
+    { id: 'REVIEWING', label: 'Đang ôn', count: statusSummary.REVIEWING },
+    { id: 'MASTERED', label: 'Đã thuộc', count: statusSummary.MASTERED },
+    { id: 'ALL', label: 'Tất cả', count: statusSummary.total },
+  ];
+
+  if (!hasLoaded) return null;
+
+  if (baseWords.length === 0) {
     return (
       <div className="max-w-md mx-auto text-center py-16 space-y-4">
         <Headphones size={40} className="mx-auto text-slate-300" />
@@ -215,7 +342,7 @@ export default function HandsFreeAudioPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-6 animate-in fade-in pb-12">
+    <div className="max-w-xl mx-auto space-y-5 animate-in fade-in pb-12">
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <Link
@@ -226,11 +353,112 @@ export default function HandsFreeAudioPage() {
         </Link>
 
         <span className="text-xs font-bold text-slate-400">
-          Từ {currentIndex + 1} / {playlist.length}
+          {playlist.length > 0 ? `Từ ${safeIndex + 1} / ${playlist.length}` : '0 từ'}
         </span>
       </div>
 
-      {/* Main Player Display Box */}
+      {/* Bộ lọc trạng thái & lượng từ */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Trạng thái từ
+            </span>
+            <button
+              type="button"
+              onClick={handleShuffle}
+              disabled={filteredPool.length < 2}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 transition"
+              title="Xáo trộn thứ tự phát"
+            >
+              <Shuffle size={12} className="text-indigo-500" />
+              <span>Trộn</span>
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => handleStatusChange(opt.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  statusFilter === opt.id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {opt.label} ({opt.count})
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+            Lượng từ muốn nghe ({playlist.length}/{filteredPool.length} từ)
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {WORD_LIMIT_PRESETS.map((preset) => {
+              const isSelected = customLimitText === '' && wordLimit === preset.value;
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => handlePresetLimitChange(preset.value)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    isSelected
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={Math.max(1, filteredPool.length)}
+                value={customLimitText}
+                onChange={(e) => handleCustomLimitChange(e.target.value)}
+                placeholder="Nhập SL..."
+                aria-label="Nhập số lượng từ muốn nghe"
+                className={`w-24 px-2.5 py-1.5 rounded-xl text-xs font-bold border bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+                  customLimitText !== ''
+                    ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30'
+                    : 'border-slate-200 dark:border-slate-700'
+                }`}
+              />
+              {customLimitText !== '' && (
+                <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                  từ
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!currentItem ? (
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+          <Headphones size={34} className="mx-auto text-slate-300 dark:text-slate-600" />
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            Không có từ nào thuộc trạng thái này để phát.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleStatusChange('ALL')}
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition"
+          >
+            Nghe tất cả ({statusSummary.total} từ)
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Main Player Display Box */}
       <div className="relative p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-indigo-900 to-slate-900 text-white shadow-2xl overflow-hidden space-y-6 text-center">
         {/* Glow ambient background circle */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -360,7 +588,7 @@ export default function HandsFreeAudioPage() {
                 }
               }}
               className={`w-full p-2.5 rounded-xl text-left flex items-center justify-between text-xs transition ${
-                currentIndex === idx
+                safeIndex === idx
                   ? 'bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold'
                   : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
               }`}
@@ -377,6 +605,8 @@ export default function HandsFreeAudioPage() {
           ))}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
