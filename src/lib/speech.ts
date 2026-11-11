@@ -1,4 +1,4 @@
-// Audio & Web Speech wrapper supporting natural native Vietnamese (/api/tts) + Web Speech fallback
+// Audio & Web Speech wrapper using /api/tts for clear EN/VI playback + Web Speech fallback
 
 export interface SpeakOptions {
   rate?: number;
@@ -11,9 +11,13 @@ export interface SpeakOptions {
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 const MAX_CHUNK_LEN = 180;
+const CANCEL_SPEECH_COOLDOWN_MS = 75;
 
 let sharedAudio: HTMLAudioElement | null = null;
 let playbackToken = 0;
+let audioUnlocked = false;
+let webSpeechTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSpeechCancelAt = 0;
 
 function getAudioElement(): HTMLAudioElement | null {
   if (typeof window === 'undefined' || typeof Audio === 'undefined') return null;
@@ -30,10 +34,11 @@ function clearAudioHandlers(audio: HTMLAudioElement): void {
 }
 
 /**
- * Call synchronously inside a user tap/click handler so mobile Safari/Chrome
- * unlocks sequential HTMLAudioElement playback for hands-free mode.
+ * Call inside a user click/tap when playback is NOT immediately starting on sharedAudio,
+ * so mobile Safari/Chrome unlocks HTMLAudioElement for future queued steps.
  */
 export function unlockSpeechAudio(): void {
+  if (audioUnlocked) return;
   const audio = getAudioElement();
   if (!audio) return;
   try {
@@ -43,6 +48,7 @@ export function unlockSpeechAudio(): void {
       if (playPromise && typeof playPromise.then === 'function') {
         playPromise
           .then(() => {
+            audioUnlocked = true;
             if (audio.src === SILENT_WAV) {
               audio.pause();
             }
@@ -57,17 +63,28 @@ export function unlockSpeechAudio(): void {
 
 export function stopSpeaking(): void {
   playbackToken += 1;
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+
+  if (webSpeechTimer !== null) {
+    clearTimeout(webSpeechTimer);
+    webSpeechTimer = null;
   }
+
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      lastSpeechCancelAt = Date.now();
+      window.speechSynthesis.cancel();
+    }
+  }
+
   const audio = sharedAudio;
   if (audio) {
     clearAudioHandlers(audio);
     try {
-      audio.pause();
-      audio.currentTime = 0;
+      if (!audio.paused) {
+        audio.pause();
+      }
     } catch {
-      // Ignore reset errors on uninitialized audio element
+      // Ignore pause errors on uninitialized audio element
     }
   }
 }
@@ -108,30 +125,51 @@ function speakViaWebSpeech(text: string, options: SpeakOptions, token: number): 
     return;
   }
 
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  const lang = options.lang || 'en-US';
-  utterance.lang = lang;
-  utterance.rate = options.rate ?? 0.92;
-  utterance.pitch = options.pitch ?? 1.0;
-
-  const bestVoice = pickBestVoice(window.speechSynthesis.getVoices(), lang);
-  if (bestVoice) {
-    utterance.voice = bestVoice;
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    lastSpeechCancelAt = Date.now();
+    window.speechSynthesis.cancel();
   }
 
-  utterance.onend = () => {
+  const runUtterance = () => {
+    webSpeechTimer = null;
     if (token !== playbackToken) return;
-    options.onEnd?.();
+
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const lang = options.lang || 'en-US';
+    utterance.lang = lang;
+    utterance.rate = options.rate ?? 0.92;
+    utterance.pitch = options.pitch ?? 1.0;
+
+    const bestVoice = pickBestVoice(window.speechSynthesis.getVoices(), lang);
+    if (bestVoice) {
+      utterance.voice = bestVoice;
+    }
+
+    utterance.onend = () => {
+      if (token !== playbackToken) return;
+      options.onEnd?.();
+    };
+
+    utterance.onerror = () => {
+      if (token !== playbackToken) return;
+      options.onError?.();
+    };
+
+    window.speechSynthesis.speak(utterance);
   };
 
-  utterance.onerror = () => {
-    if (token !== playbackToken) return;
-    options.onError?.();
-  };
-
-  window.speechSynthesis.speak(utterance);
+  // Chromium silently drops or cancels utterances spoken immediately after cancel()
+  const elapsed = Date.now() - lastSpeechCancelAt;
+  const delay = elapsed < CANCEL_SPEECH_COOLDOWN_MS ? CANCEL_SPEECH_COOLDOWN_MS - elapsed : 0;
+  if (delay > 0) {
+    webSpeechTimer = setTimeout(runUtterance, delay);
+  } else {
+    runUtterance();
+  }
 }
 
 function splitTextForTts(text: string, maxLen: number = MAX_CHUNK_LEN): string[] {
@@ -159,6 +197,13 @@ function splitTextForTts(text: string, maxLen: number = MAX_CHUNK_LEN): string[]
   return chunks;
 }
 
+function buildTtsUrls(text: string, lang: 'en-US' | 'en-GB' | 'vi-VN' | undefined): string[] {
+  const apiLang = lang === 'vi-VN' ? 'vi' : 'en';
+  return splitTextForTts(text).map(
+    (chunk) => `/api/tts?lang=${apiLang}&text=${encodeURIComponent(chunk)}`
+  );
+}
+
 function playUrlQueue(
   urls: string[],
   options: SpeakOptions,
@@ -183,8 +228,9 @@ function playUrlQueue(
     const url = urls[index];
     index += 1;
     clearAudioHandlers(audio);
+    const targetRate = Math.max(0.75, Math.min(1.35, options.rate ?? 1));
     audio.src = url;
-    audio.playbackRate = Math.max(0.75, Math.min(1.35, options.rate ?? 1));
+    audio.playbackRate = targetRate;
 
     audio.onended = () => {
       if (token !== playbackToken) return;
@@ -199,12 +245,21 @@ function playUrlQueue(
 
     try {
       const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {
-          if (token !== playbackToken) return;
-          clearAudioHandlers(audio);
-          onAllFailed();
-        });
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            audioUnlocked = true;
+            if (token === playbackToken) {
+              audio.playbackRate = targetRate;
+            }
+          })
+          .catch(() => {
+            if (token !== playbackToken) return;
+            clearAudioHandlers(audio);
+            onAllFailed();
+          });
+      } else {
+        audioUnlocked = true;
       }
     } catch {
       clearAudioHandlers(audio);
@@ -222,13 +277,25 @@ export function playAudioUrlWithFallback(
 ): void {
   stopSpeaking();
   const token = playbackToken;
+  const cleanText = fallbackText.trim();
+  const ttsUrls = cleanText ? buildTtsUrls(cleanText, options.lang) : [];
+
+  const playTtsOrWebSpeech = () => {
+    if (ttsUrls.length > 0) {
+      playUrlQueue(ttsUrls, options, token, () => speakViaWebSpeech(cleanText, options, token));
+    } else if (cleanText) {
+      speakViaWebSpeech(cleanText, options, token);
+    } else {
+      options.onEnd?.();
+    }
+  };
 
   if (audioUrl) {
-    playUrlQueue([audioUrl], options, token, () => speakViaWebSpeech(fallbackText, options, token));
+    playUrlQueue([audioUrl], options, token, playTtsOrWebSpeech);
     return;
   }
 
-  speakViaWebSpeech(fallbackText, options, token);
+  playTtsOrWebSpeech();
 }
 
 export function speakText(text: string, options: SpeakOptions = {}): void {
@@ -240,12 +307,6 @@ export function speakText(text: string, options: SpeakOptions = {}): void {
     return;
   }
 
-  if (options.lang === 'vi-VN') {
-    const chunks = splitTextForTts(cleanText);
-    const urls = chunks.map((chunk) => `/api/tts?lang=vi&text=${encodeURIComponent(chunk)}`);
-    playUrlQueue(urls, options, token, () => speakViaWebSpeech(cleanText, options, token));
-    return;
-  }
-
-  speakViaWebSpeech(cleanText, options, token);
+  const ttsUrls = buildTtsUrls(cleanText, options.lang);
+  playUrlQueue(ttsUrls, options, token, () => speakViaWebSpeech(cleanText, options, token));
 }

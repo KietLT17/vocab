@@ -41,7 +41,10 @@ export default function HandsFreeAudioPage() {
   const [isRepeatWord, setIsRepeatWord] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(0.95);
   const [currentStepText, setCurrentStepText] = useState<string>('Sẵn sàng');
-  const [exampleTranslation, setExampleTranslation] = useState<string>('');
+  const [translationState, setTranslationState] = useState<{ wordId: string; text: string }>({
+    wordId: '',
+    text: '',
+  });
 
   const isPlayingRef = useRef(false);
   const isRepeatRef = useRef(false);
@@ -49,6 +52,7 @@ export default function HandsFreeAudioPage() {
   const playlistRef = useRef<UserVocabItem[]>([]);
   const speechRateRef = useRef(0.95);
   const runIdRef = useRef(0);
+  const sleepCleanupRef = useRef<(() => void) | null>(null);
 
   const statusSummary = useMemo(() => {
     const now = Date.now();
@@ -120,8 +124,14 @@ export default function HandsFreeAudioPage() {
     speechRateRef.current = speechRate;
   }, [speechRate]);
 
+  const cancelPendingSleep = () => {
+    sleepCleanupRef.current?.();
+    sleepCleanupRef.current = null;
+  };
+
   const stopAndResetPlayback = () => {
     runIdRef.current += 1;
+    cancelPendingSleep();
     stopSpeaking();
     isPlayingRef.current = false;
     setIsPlaying(false);
@@ -152,29 +162,50 @@ export default function HandsFreeAudioPage() {
     return () => {
       window.removeEventListener('vocabflow_account_changed', handleAccountChanged);
       window.removeEventListener('vocabflow_storage_updated', handleStorageUpdated);
+      cancelPendingSleep();
       stopSpeaking();
       isPlayingRef.current = false;
     };
   }, []);
 
   const currentItem = playlist[safeIndex];
+  const exampleTranslation =
+    currentItem && translationState.wordId === currentItem.id ? translationState.text : '';
 
   useEffect(() => {
     let active = true;
-    if (!currentItem?.example) {
-      setExampleTranslation('');
+    const targetId = currentItem?.id;
+    const example = currentItem?.example;
+    const meaning = currentItem?.vietnameseMeaning;
+
+    if (!targetId || !example) {
+      setTranslationState({ wordId: targetId || '', text: '' });
       return;
     }
-    setExampleTranslation('');
-    translateSentenceToVietnamese(currentItem.example, currentItem.vietnameseMeaning).then((vi) => {
-      if (active) setExampleTranslation(vi);
+
+    translateSentenceToVietnamese(example, meaning).then((vi) => {
+      if (active) {
+        setTranslationState({ wordId: targetId, text: vi });
+      }
     });
+
     return () => {
       active = false;
     };
   }, [currentItem?.id, currentItem?.example, currentItem?.vietnameseMeaning]);
 
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      cancelPendingSleep();
+      const timer = setTimeout(() => {
+        sleepCleanupRef.current = null;
+        resolve();
+      }, ms);
+      sleepCleanupRef.current = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
 
   // Play audio url (native mp3) or fallback to speech
   const playNativeOrSpeechWord = (wordItem: UserVocabItem): Promise<void> => {
@@ -215,7 +246,7 @@ export default function HandsFreeAudioPage() {
     setCurrentStepText(`1. Đang đọc từ: "${item.word}"`);
     await playNativeOrSpeechWord(item);
     if (aborted()) return;
-    await sleep(900);
+    await sleep(1000);
     if (aborted()) return;
 
     // Step 2: Speak Vietnamese meaning with natural Vietnamese voice
@@ -223,7 +254,7 @@ export default function HandsFreeAudioPage() {
       setCurrentStepText(`2. Nghĩa tiếng Việt: "${item.vietnameseMeaning}"`);
       await speakVietnamese(item.vietnameseMeaning);
       if (aborted()) return;
-      await sleep(900);
+      await sleep(1000);
       if (aborted()) return;
     }
 
@@ -239,24 +270,26 @@ export default function HandsFreeAudioPage() {
         });
       });
       if (aborted()) return;
-      await sleep(700);
+      await sleep(800);
       if (aborted()) return;
 
       // Step 4: Speak Vietnamese translation of the example sentence
       const exampleVi = (await exampleViPromise).trim();
       if (aborted()) return;
       if (exampleVi && !exampleVi.startsWith('Bản dịch ngữ cảnh:')) {
-        setExampleTranslation((prev) => prev || exampleVi);
+        setTranslationState({ wordId: item.id, text: exampleVi });
         setCurrentStepText('4. Đọc dịch câu ví dụ...');
         await speakVietnamese(exampleVi);
         if (aborted()) return;
-        await sleep(1400);
+        await sleep(1500);
         if (aborted()) return;
       } else {
-        await sleep(800);
+        await sleep(900);
         if (aborted()) return;
       }
     }
+
+    if (aborted()) return;
 
     if (isRepeatRef.current) {
       playWordSequence(idx);
@@ -270,17 +303,21 @@ export default function HandsFreeAudioPage() {
 
   const startPlayingAt = (idx: number, forcePlay: boolean) => {
     if (playlist.length === 0) return;
+    const clampedIdx = ((idx % playlist.length) + playlist.length) % playlist.length;
     runIdRef.current += 1;
+    cancelPendingSleep();
     stopSpeaking();
-    unlockSpeechAudio();
-    setCurrentIndex(idx);
-    currentIndexRef.current = idx;
+    currentIndexRef.current = clampedIdx;
+    setCurrentIndex(clampedIdx);
     if (forcePlay) {
       setIsPlaying(true);
       isPlayingRef.current = true;
     }
     if (forcePlay || isPlayingRef.current) {
-      playWordSequence(idx);
+      playWordSequence(clampedIdx);
+    } else {
+      unlockSpeechAudio();
+      setCurrentStepText('Sẵn sàng');
     }
   };
 
@@ -288,27 +325,33 @@ export default function HandsFreeAudioPage() {
     if (playlist.length === 0) return;
     if (isPlaying) {
       runIdRef.current += 1;
+      cancelPendingSleep();
       setIsPlaying(false);
       isPlayingRef.current = false;
       stopSpeaking();
       setCurrentStepText('Tạm dừng');
     } else {
-      startPlayingAt(safeIndex, true);
+      const cur = Math.min(currentIndexRef.current, playlist.length - 1);
+      startPlayingAt(cur, true);
     }
   };
 
   const handleSkipNext = () => {
     if (playlist.length === 0) return;
-    startPlayingAt((safeIndex + 1) % playlist.length, false);
+    const cur = Math.min(currentIndexRef.current, playlist.length - 1);
+    startPlayingAt((cur + 1) % playlist.length, false);
   };
 
   const handleSkipPrev = () => {
     if (playlist.length === 0) return;
-    startPlayingAt((safeIndex - 1 + playlist.length) % playlist.length, false);
+    const cur = Math.min(currentIndexRef.current, playlist.length - 1);
+    startPlayingAt((cur - 1 + playlist.length) % playlist.length, false);
   };
 
   const handleReplayCurrent = () => {
-    startPlayingAt(safeIndex, true);
+    if (playlist.length === 0) return;
+    const cur = Math.min(currentIndexRef.current, playlist.length - 1);
+    startPlayingAt(cur, true);
   };
 
   const handleRestartPlaylist = () => {

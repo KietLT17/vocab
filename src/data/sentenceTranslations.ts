@@ -69,16 +69,19 @@ export const CURATED_SENTENCE_TRANSLATIONS: Record<string, string> = {
  */
 export async function translateSentenceToVietnamese(sentence: string, targetWordMeaning?: string): Promise<string> {
   const cleanKey = sentence.trim().toLowerCase().replace(/["']/g, '');
+  if (!cleanKey) return '';
 
   // 1. Direct match in curated dictionary
   if (CURATED_SENTENCE_TRANSLATIONS[cleanKey]) {
     return CURATED_SENTENCE_TRANSLATIONS[cleanKey];
   }
 
-  // Partial match in curated dictionary
-  for (const [key, val] of Object.entries(CURATED_SENTENCE_TRANSLATIONS)) {
-    if (cleanKey.includes(key) || key.includes(cleanKey)) {
-      return val;
+  // Partial match in curated dictionary for substantial sentences only
+  if (cleanKey.length >= 12) {
+    for (const [key, val] of Object.entries(CURATED_SENTENCE_TRANSLATIONS)) {
+      if (cleanKey.includes(key) || key.includes(cleanKey)) {
+        return val;
+      }
     }
   }
 
