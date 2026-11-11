@@ -1,6 +1,10 @@
 import { WordItem } from './types';
-import { CURATED_VOCABULARY, EXTENDED_WORD_POOL } from '../data/curatedDictionary';
-import { WORD_DEFINITIONS_MAP } from '../data/wordDefinitionsMap';
+import {
+  buildExtendedWordItem,
+  CURATED_VOCABULARY,
+  EXTENDED_WORD_POOL,
+} from '../data/curatedDictionary';
+import { TOPIC_WORDS } from '../data/topicsVocabulary';
 
 export interface FreeDictResponse {
   word: string;
@@ -121,52 +125,34 @@ export async function lookupDictionaryWord(word: string): Promise<WordItem | nul
 }
 
 /**
- * Get a random word not in the excluded list
+ * Get a random word across all curated/topic/extended pools, excluding words already in the active account.
  */
 export async function fetchRandomWordExcluding(
   excludedWordIds: Set<string>
 ): Promise<WordItem | null> {
-  // 1. Try first from curated vocabulary
-  const availableCurated = CURATED_VOCABULARY.filter(
-    (w) => !excludedWordIds.has(w.id.toLowerCase()) && !excludedWordIds.has(w.word.toLowerCase())
-  );
+  const excludedLower = new Set(Array.from(excludedWordIds, (w) => w.toLowerCase()));
+  const candidatesByWord = new Map<string, WordItem>();
 
-  if (availableCurated.length > 0) {
-    const randomIndex = Math.floor(Math.random() * availableCurated.length);
-    return availableCurated[randomIndex];
-  }
-
-  // 2. Try from extended pool (instant local map first to avoid blocking mount on remote API)
-  const availableExtended = EXTENDED_WORD_POOL.filter(
-    (w) => !excludedWordIds.has(w.toLowerCase())
-  );
-
-  if (availableExtended.length > 0) {
-    const randomIndex = Math.floor(Math.random() * availableExtended.length);
-    const selectedWord = availableExtended[randomIndex];
-    const clean = selectedWord.toLowerCase();
-    const localMeta = WORD_DEFINITIONS_MAP[clean];
-    if (localMeta) {
-      return {
-        id: clean,
-        word: clean,
-        ipa: `/${clean}/`,
-        pos: localMeta.pos,
-        level: 'B2',
-        audioUrl: `https://api.dictionaryapi.dev/media/pronunciations/en/${clean}-us.mp3`,
-        definitions: [
-          {
-            definition: localMeta.definition,
-            vietnameseMeaning: localMeta.vietnameseMeaning,
-            example: `Understanding how to use "${clean}" accurately improves your English fluency.`,
-          },
-        ],
-      };
+  const registerCandidate = (item: WordItem) => {
+    const clean = item.word.trim().toLowerCase();
+    if (!excludedLower.has(clean) && !excludedLower.has(item.id.toLowerCase()) && !candidatesByWord.has(clean)) {
+      candidatesByWord.set(clean, item);
     }
-    const details = await lookupDictionaryWord(selectedWord);
-    if (details) return details;
-  }
+  };
 
-  return null;
+  for (const w of CURATED_VOCABULARY) registerCandidate(w);
+  for (const w of Object.values(TOPIC_WORDS).flat()) registerCandidate(w);
+  for (const ext of EXTENDED_WORD_POOL) registerCandidate(buildExtendedWordItem(ext));
+
+  const pool = Array.from(candidatesByWord.values());
+  if (pool.length === 0) return null;
+
+  const selected = pool[Math.floor(Math.random() * pool.length)];
+  // If synthesized fallback lacks curated rich definition in map, try online dictionary lookup
+  if (selected.topic === 'Oxford Extended' && selected.definitions[0]?.vietnameseMeaning === selected.word) {
+    const online = await lookupDictionaryWord(selected.word);
+    if (online) return online;
+  }
+  return selected;
 }
 

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Sparkles, Check, Loader2, BookOpen, PenTool, Rocket } from 'lucide-react';
 import { TOPIC_CATEGORIES } from '../data/topicsVocabulary';
 import { buildInitial50WordDeck } from '../lib/topicDeckBuilder';
-import { completeOnboardingWithDeck } from '../lib/storage';
+import { completeOnboardingWithDeck, getOtherAccountWordSets, getStoredUserVocab } from '../lib/storage';
 import { updateActiveUserProfile } from '../lib/auth';
 
 interface Props {
@@ -34,12 +34,16 @@ export default function Onboarding50Modal({ isOpen, onCompleted }: Props) {
     setProgress({ current: 5, total: 50, text: 'Đang khởi tạo bộ từ vựng...' });
 
     try {
+      const existingInAccount = new Set(getStoredUserVocab().map((w) => w.word.toLowerCase()));
+      const otherAccountSets = getOtherAccountWordSets();
       const deck = await buildInitial50WordDeck(
         selectedTopics,
         customTopic,
         (current, total, text) => {
           setProgress({ current, total, text });
-        }
+        },
+        existingInAccount,
+        otherAccountSets
       );
 
       completeOnboardingWithDeck(deck, selectedTopics, customTopic.trim() || undefined);

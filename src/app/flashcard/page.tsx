@@ -18,6 +18,7 @@ import {
 import AudioPlayerButton from '../../components/AudioPlayerButton';
 import SentenceAudioButton from '../../components/SentenceAudioButton';
 import { calculateNextSRS, evaluateQuizMastery } from '../../lib/srs';
+import { shuffleArray } from '../../data/curatedDictionary';
 import { speakText, stopSpeaking } from '../../lib/speech';
 import { getDueReviewWords, getStoredUserVocab, recordWordReview } from '../../lib/storage';
 import { ReviewGrade, UserVocabItem } from '../../lib/types';
@@ -79,7 +80,7 @@ function selectDeck(
   }
 
   const ordered = shuffle
-    ? [...pool].sort(() => 0.5 - Math.random())
+    ? shuffleArray(pool)
     : [...pool].sort(
         (a, b) => new Date(a.nextReviewAt).getTime() - new Date(b.nextReviewAt).getTime()
       );

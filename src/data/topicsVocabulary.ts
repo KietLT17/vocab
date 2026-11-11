@@ -1,4 +1,10 @@
 import { WordItem } from '../lib/types';
+import {
+  buildExtendedWordItem,
+  CURATED_VOCABULARY,
+  EXTENDED_WORD_POOL,
+  shuffleArray,
+} from './curatedDictionary';
 
 export interface TopicCategory {
   id: string;
@@ -1040,48 +1046,52 @@ export const TOPIC_WORDS: Record<string, WordItem[]> = {
 };
 
 /**
- * Get N random words from a specific topic that are NOT in the excluded set
+ * Get N random words from a specific topic that are NOT in the active account's excluded set.
  */
 export function getRandomTopicWords(
   topicId: string,
   count: number = 5,
   excludedWordIds: Set<string>
 ): WordItem[] {
-  const pool = TOPIC_WORDS[topicId] || [];
-
-  // Filter out words already stored in user bank
-  const available = pool.filter(
-    (w) =>
+  const isAllowed = (w: WordItem, seen: Set<string>) => {
+    const clean = w.word.trim().toLowerCase();
+    return (
       !excludedWordIds.has(w.id.toLowerCase()) &&
-      !excludedWordIds.has(w.word.toLowerCase())
-  );
+      !excludedWordIds.has(clean) &&
+      !seen.has(clean)
+    );
+  };
 
-  // Shuffle available
-  const shuffled = [...available].sort(() => 0.5 - Math.random());
+  const picked: WordItem[] = [];
+  const seen = new Set<string>();
 
-  if (shuffled.length >= count) {
-    return shuffled.slice(0, count);
-  }
-
-  // If not enough non-duplicate words in this specific topic, fill from other topics to satisfy requested count
-  const remainingNeeded = count - shuffled.length;
-  const otherWords: WordItem[] = [];
-
-  for (const [tId, words] of Object.entries(TOPIC_WORDS)) {
-    if (tId !== topicId) {
-      for (const w of words) {
-        if (
-          !excludedWordIds.has(w.id.toLowerCase()) &&
-          !excludedWordIds.has(w.word.toLowerCase()) &&
-          !shuffled.some((s) => s.id === w.id)
-        ) {
-          otherWords.push(w);
-        }
-      }
+  for (const w of shuffleArray(TOPIC_WORDS[topicId] || [])) {
+    if (picked.length >= count) break;
+    if (isAllowed(w, seen)) {
+      seen.add(w.word.trim().toLowerCase());
+      picked.push(w);
     }
   }
 
-  const shuffledOthers = otherWords.sort(() => 0.5 - Math.random()).slice(0, remainingNeeded);
-  return [...shuffled, ...shuffledOthers];
+  if (picked.length >= count) return picked;
+
+  // Fill any shortfall randomly from other topics + curated + extended words
+  const remainingPool: WordItem[] = [
+    ...Object.entries(TOPIC_WORDS)
+      .filter(([tId]) => tId !== topicId)
+      .flatMap(([, words]) => words),
+    ...CURATED_VOCABULARY,
+    ...EXTENDED_WORD_POOL.map((w) => buildExtendedWordItem(w)),
+  ];
+
+  for (const w of shuffleArray(remainingPool)) {
+    if (picked.length >= count) break;
+    if (isAllowed(w, seen)) {
+      seen.add(w.word.trim().toLowerCase());
+      picked.push(w);
+    }
+  }
+
+  return picked;
 }
 

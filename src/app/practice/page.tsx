@@ -27,6 +27,7 @@ import { ReviewGrade, UserVocabItem } from '../../lib/types';
 import { getDueReviewWords, getStoredUserVocab, recordWordReview } from '../../lib/storage';
 import { getActiveUserProfile } from '../../lib/auth';
 import { evaluateQuizMastery, MIN_ATTEMPTS_FOR_MASTERY } from '../../lib/srs';
+import { shuffleArray } from '../../data/curatedDictionary';
 
 type StudyMode = 'LISTEN_ONLY' | 'READ_ONLY' | 'WRITE_ONLY' | 'COMBO';
 type WordFilter = 'ALL' | 'UNMASTERED' | 'DUE';
@@ -103,7 +104,7 @@ function buildCluster(
   }
 
   const ordered = shuffle
-    ? [...pool].sort(() => 0.5 - Math.random())
+    ? shuffleArray(pool)
     : [...pool].sort(
         (a, b) => new Date(a.nextReviewAt).getTime() - new Date(b.nextReviewAt).getTime()
       );

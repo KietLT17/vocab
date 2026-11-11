@@ -14,7 +14,12 @@ import {
   evaluateQuizMastery,
 } from './srs';
 import { DEMO_USER_ID, getActiveUserId } from './auth';
-import { CURATED_VOCABULARY } from '../data/curatedDictionary';
+import {
+  buildExtendedWordItem,
+  CURATED_VOCABULARY,
+  EXTENDED_WORD_POOL,
+  shuffleArray,
+} from '../data/curatedDictionary';
 import { TOPIC_WORDS } from '../data/topicsVocabulary';
 
 const STORAGE_KEY = 'vocabflow_user_words_v1';
@@ -107,15 +112,19 @@ function ensureDemoAccountData(): void {
   const onboardingKey = scopedKey(ONBOARDING_KEY, DEMO_USER_ID);
   if (localStorage.getItem(onboardingKey)) return;
 
-  const seen = new Set<string>();
-  const combinedSource: WordItem[] = [];
-  for (const w of [...CURATED_VOCABULARY, ...Object.values(TOPIC_WORDS).flat()]) {
+  const uniqueByWord = new Map<string, WordItem>();
+  const rawSources: WordItem[] = [
+    ...CURATED_VOCABULARY,
+    ...Object.values(TOPIC_WORDS).flat(),
+    ...EXTENDED_WORD_POOL.map((w) => buildExtendedWordItem(w)),
+  ];
+  for (const w of rawSources) {
     const key = w.word.trim().toLowerCase();
-    if (!seen.has(key) && combinedSource.length < 50) {
-      seen.add(key);
-      combinedSource.push(w);
+    if (!uniqueByWord.has(key)) {
+      uniqueByWord.set(key, w);
     }
   }
+  const combinedSource = shuffleArray(Array.from(uniqueByWord.values())).slice(0, 50);
 
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
@@ -151,6 +160,27 @@ function ensureDemoAccountData(): void {
     wordsLearnedToday: 5,
     reviewsCompletedToday: 8,
   } satisfies DailyStats);
+}
+
+export function getOtherAccountWordSets(): Set<string>[] {
+  if (typeof window === 'undefined') return [];
+  const activeId = getActiveUserId();
+  try {
+    const rawAccounts = localStorage.getItem('vocabflow_accounts_v1');
+    const accounts = rawAccounts ? (JSON.parse(rawAccounts) as Array<{ id?: string }>) : [];
+    const sets: Set<string>[] = [];
+
+    for (const acc of accounts) {
+      if (!acc?.id || acc.id === activeId) continue;
+      const words = readJson<UserVocabItem[]>(scopedKey(STORAGE_KEY, acc.id), []);
+      if (words.length > 0) {
+        sets.push(new Set(words.map((w) => w.word.trim().toLowerCase())));
+      }
+    }
+    return sets;
+  } catch {
+    return [];
+  }
 }
 
 export function getOnboardingState(): OnboardingState {

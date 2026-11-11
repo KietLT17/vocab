@@ -1,4 +1,5 @@
 import { WordItem } from '../lib/types';
+import { WORD_DEFINITIONS_MAP } from './wordDefinitionsMap';
 
 /**
  * Curated base vocabulary dataset with verified IPA, Audio, Meaning, and Realistic Context.
@@ -358,4 +359,43 @@ export const EXTENDED_WORD_POOL = [
   "prolific", "redundant", "reminiscent", "resilient", "skeptical", "subtle",
   "tangible", "tenacious", "unprecedented", "viable", "vindicate", "wary", "zealous"
 ];
+
+/**
+ * Unbiased Fisher-Yates shuffle returning a new array.
+ */
+export function shuffleArray<T>(items: readonly T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/**
+ * Convert a word string from EXTENDED_WORD_POOL into a full WordItem using WORD_DEFINITIONS_MAP.
+ */
+export function buildExtendedWordItem(
+  rawWord: string,
+  topicLabel: string = 'Oxford Extended'
+): WordItem {
+  const clean = rawWord.trim().toLowerCase();
+  const meta = WORD_DEFINITIONS_MAP[clean];
+  return {
+    id: clean,
+    word: clean,
+    ipa: `/${clean}/`,
+    pos: meta?.pos || 'adjective',
+    level: 'B2',
+    audioUrl: `https://api.dictionaryapi.dev/media/pronunciations/en/${clean}-us.mp3`,
+    topic: topicLabel,
+    definitions: [
+      {
+        definition: meta?.definition || `An essential academic word: ${clean}.`,
+        vietnameseMeaning: meta?.vietnameseMeaning || clean,
+        example: `Understanding how to use "${clean}" accurately improves your English fluency.`,
+      },
+    ],
+  };
+}
 

@@ -53,6 +53,9 @@ function loadTs(relPath) {
 const auth = loadTs('src/lib/auth.ts');
 const storage = loadTs('src/lib/storage.ts');
 const qbank = loadTs('src/data/questionBank.ts');
+const deckBuilder = loadTs('src/lib/topicDeckBuilder.ts');
+const topicsVocab = loadTs('src/data/topicsVocabulary.ts');
+const dictApi = loadTs('src/lib/dictionaryApi.ts');
 
 async function main() {
   // 0. Ensure user registration is completely removed and unauthenticated state stays empty
@@ -111,12 +114,43 @@ async function main() {
   assert.equal(afterFc.timesCorrect, beforeFc.timesCorrect, 'Flashcard must not inflate quiz correct count');
   assert.ok(afterFc.repetitions >= 1 && afterFc.intervalDays >= 1, 'Flashcard updates SRS schedule');
 
-  // 6. Extra empty accounts hocvien1..hocvien3 start isolated and empty
+  // 6. Extra empty accounts hocvien1..hocvien3: randomized 50-word decks, per-account dedup only, never 100% clones
+  const deckByStudent = [];
   for (const n of [1, 2, 3]) {
     const loginRes = await auth.loginAccount(`hocvien${n}`, '123456');
     assert.equal(loginRes.ok, true, `hocvien${n} should log in`);
     assert.equal(storage.getStoredUserVocab().length, 0, `hocvien${n} starts empty`);
+
+    const deck = await deckBuilder.buildInitial50WordDeck(
+      ['business', 'daily_life'],
+      undefined,
+      undefined,
+      new Set(storage.getStoredUserVocab().map((w) => w.word.toLowerCase())),
+      storage.getOtherAccountWordSets()
+    );
+    assert.equal(deck.length, 50, `hocvien${n} deck has 50 words`);
+    const uniqueWords = new Set(deck.map((w) => w.word.toLowerCase()));
+    assert.equal(uniqueWords.size, 50, `hocvien${n} deck has 0 intra-account duplicates`);
+    storage.completeOnboardingWithDeck(deck, ['business', 'daily_life']);
+    deckByStudent.push(uniqueWords);
+
+    // Per-account dedup on subsequent topic batch & random single word
+    const ownExcluded = new Set(storage.getStoredUserVocab().map((w) => w.word.toLowerCase()));
+    const extraBatch = topicsVocab.getRandomTopicWords('business', 10, ownExcluded);
+    assert.ok(extraBatch.length > 0, `hocvien${n} can still draw remaining non-duplicate words`);
+    assert.ok(
+      extraBatch.every((w) => !ownExcluded.has(w.word.toLowerCase())),
+      `hocvien${n} batch must not duplicate own words`
+    );
+    const singleRand = await dictApi.fetchRandomWordExcluding(ownExcluded);
+    assert.ok(singleRand && !ownExcluded.has(singleRand.word.toLowerCase()), 'Random word excludes own words only');
   }
+
+  // Ensure cross-account overlap is allowed yet decks are not 100% identical
+  const overlap12 = [...deckByStudent[0]].filter((w) => deckByStudent[1].has(w)).length;
+  const overlap23 = [...deckByStudent[1]].filter((w) => deckByStudent[2].has(w)).length;
+  assert.ok(overlap12 < 50, 'hocvien1 & hocvien2 must not be 100% identical');
+  assert.ok(overlap23 < 50, 'hocvien2 & hocvien3 must not be 100% identical');
 
   // 7. Logout hides data again
   auth.logoutAccount();
@@ -128,6 +162,8 @@ async function main() {
     demoWords: demoVocab.length,
     demoMasteredWords: demoTestGen.masteredWordsCount,
     demoGeneratedQuestions: demoTestGen.questions.length,
+    overlap12,
+    overlap23,
   });
 }
 
